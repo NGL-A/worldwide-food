@@ -1,27 +1,34 @@
-# Remember to eliminate first 4 rows on gdp.csv (https://api.worldbank.org/v2/en/indicator/NY.GDP.MKTP.CD?downloadformat=csv)
-
-#provenienza dataset  Food and Agricultural Organization of United Nations
-#https://data.worldbank.org/indicator/NY.GDP.MKTP.CD
+# Remember to eliminate first 4 rows on gdp.csv 
+# (https://api.worldbank.org/v2/en/indicator/NY.GDP.MKTP.CD?downloadformat=csv)
+# provenienza dataset  Food and Agricultural Organization of United Nations
+# https://data.worldbank.org/indicator/NY.GDP.MKTP.CD
 import pandas as pd
 import numpy as np
+
+
 crop = pd.read_csv("crop1.csv")
 live = pd.read_csv("live1.csv")
 pop = pd.read_csv("pop1.csv")
 gdp = pd.read_csv("gdp.csv")
 
-gdp.drop(["Unnamed: 66","Indicator Code","Indicator Name"],axis=1,inplace=True)
+
+# for beehives it may mean the number of hives and not bees
+live['Value'] = np.where(live['Unit'] == '1000 Head',live['Value'] * 1000,live['Value'])
+live["Unit"] = 'Head'
+
+crop = crop.append(live)
+
+
+# gdp.drop(["Unnamed: 66","Indicator Code","Indicator Name"],axis=1,inplace=True)
+gdp.drop(["Indicator Code","Indicator Name"], axis = 1, inplace = True)
 gdp = gdp.melt(id_vars=["Country Name","Country Code"],var_name="Year",value_name="GDP")
 gdp = gdp.astype({"Year" : "int64"})
 
-crop["Previous_value"] = 0
-crop["Previous_value"].iloc[1:] = crop["Value"].iloc[:-1]
+
+c = [0.0]
+c.extend(list(crop["Value"][:-1].values))
+crop["Previous_value"] = c
 crop.loc[crop[["Area","Item","Element"]].drop_duplicates().index,"Previous_value"] = 0
-
-C:\Users\magli\anaconda3\lib\site-packages\pandas\core\indexing.py:1732: SettingWithCopyWarning: 
-A value is trying to be set on a copy of a slice from a DataFrame
-
-See the caveats in the documentation: https://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-  self._setitem_single_block(indexer, value, name)
 
 crop["Increase"] = 100*(crop["Value"]-crop["Previous_value"])/crop["Previous_value"]
 crop.replace([np.inf, -np.inf, np.nan], 0, inplace=True)
@@ -31,13 +38,28 @@ crop = crop.merge(gdp,how="left",left_on=["Area","Year"],right_on=["Country Name
 crop.drop("Country Name",axis=1,inplace=True)
 crop.replace([np.inf, -np.inf, np.nan], 0, inplace=True)
 
-crop["Previous_GDP"] = 0
-crop["Previous_GDP"].iloc[1:] = crop["GDP"].iloc[:-1]
-
+c = [0.0]
+c.extend(list(crop["GDP"][:-1].values))
+crop["Previous_GDP"] = c
 crop.loc[crop[["Area","Item","Element"]].drop_duplicates().index,"Previous_GDP"] = 0
+
 crop["Increase_GDP"] = 100*(crop["GDP"]-crop["Previous_GDP"])/crop["Previous_GDP"]
 crop.replace([np.inf, -np.inf, np.nan], 0, inplace=True)
 crop["Increase_GDP"] = round(crop["Increase_GDP"], 2)
+
+pop = pop.melt(id_vars=["Country Name","Country Code"],var_name="Year",value_name="Pop")
+pop = pop.astype({"Year" : "int64"})
+crop = crop.merge(pop,how="left",left_on=["Area","Year"],right_on=["Country Name","Year"])
+crop.drop(["Country Name","Country Code_y","Country Code_x"],axis=1,inplace=True)
+crop.replace([np.inf, -np.inf, np.nan], 0, inplace=True)
+
+c = [0.0]
+c.extend(list(crop["Pop"][:-1].values))
+crop["Previous_Pop"] = c
+crop.loc[crop[["Area","Item","Element"]].drop_duplicates().index,"Previous_Pop"] = 0
+crop["Increase_Pop"] = 100*(crop["Pop"]-crop["Previous_Pop"])/crop["Previous_Pop"]
+crop.replace([np.inf, -np.inf, np.nan], 0, inplace=True)
+crop["Increase_Pop"] = round(crop["Increase_Pop"], 2)
 
 fruit_vegetables = ['Apples','Apricots','Artichokes','Asparagus','Avocados','Bananas','Berries nes',
                    'Cabbages and other brassicas','Carrots and turnips','Castor oil seed',
@@ -65,6 +87,14 @@ legumes = ['Beans, dry','Beans, green','Broad beans, horse beans, dry','Chick pe
 mushrooms = ['Mushrooms and truffles']
 oils = ['Oil palm fruit','Oilseeds nes','Rapeseed','Sunflower seed']
 other = ['Rubber, natural','Safflower seed','Seed cotton','Sesame seed']
+crops=[fruit_vegetables,tubers,cereals,herbs,nuts,fibres,legumes,mushrooms,oils,other]
+crops_type = ["fruit_vegetables","tubers","cereals","herbs","nuts","fibres","legumes","mushrooms","oils","other"]
+def type_crop(row):
+    for x in crops:
+        if row["Item"] in x:
+            return crops_type[crops.index(x)]
+    return "Live"
+crop['type'] = crop.apply(type_crop, axis=1)
 
 aggregated_countries = ['Africa','Americas','Asia','Australia and New Zealand','Belgium-Luxembourg','Central America',
                         'Central Asia','China, Hong Kong SAR','China, Macao SAR','China, Taiwan Province of',
@@ -75,13 +105,17 @@ aggregated_countries = ['Africa','Americas','Asia','Australia and New Zealand','
                         'Small Island Developing States','South Africa','South America','South-eastern Asia',
                         'Southern Africa','Southern Asia','Southern Europe','Western Africa','Western Asia',
                         'Western Europe','World']
+crop["Agg"] = crop['Area'].apply(lambda x: 1 if x in aggregated_countries else 0)
 
-#possibili casi di analisi
-#guardare produzione di USSR e Russian Federation
-#guardare produzione di Yugoslav SFR e paesi post dissoluzione
 
-#es anno 1994 per Russian Federation il GDP ha -9.2% rispetto all'anno precedente e 
-#anche le coltivazioni sembrano aver subito tutte un calo -> la diminuzione dei raccolti causa il calo di GDP o
-#il contrario? Un gdp scarso un anno porta a una riduzione delle coltivazioni e quindi il gdp diminuirà di nuovo?
+# possible case studies
+# look at production of USSR and Russian Federation
+# look at production of Yugoslav SFR and post-dissolution countries
 
-crop[(crop["Area"]=="Russian Federation") & (crop["Year"]==1994)]
+# crop[(crop["Area"]=="Russian Federation") & (crop["Year"]==1994)]
+
+# e.g.: Russian Federation GDP in 1994 has -9.2% compared to the previous year and even all the other crops
+# appear to have declined -> is the drop causing GDP falling or the opposite?
+# If one year we have low GDP (leading to a reduction in crops), will this bring the GDP to decrease again?
+
+crop.to_csv('farming.csv',index=False)
