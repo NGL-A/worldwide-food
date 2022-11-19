@@ -1,5 +1,3 @@
-
-
 # Remember to eliminate first 4 rows on gdp.csv 
 #(https://api.worldbank.org/v2/en/indicator/NY.GDP.MKTP.CD?downloadformat=csv)
 #provenienza dataset  Food and Agricultural Organization of United Nations
