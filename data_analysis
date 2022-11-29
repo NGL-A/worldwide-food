@@ -1,0 +1,94 @@
+---
+title: "Progetto food-gdp"
+author: "Myself"
+date: "19/11/2022"
+output: html_document
+---
+
+```{r}
+library(readxl)
+library(lmtest) 
+library(forecast)
+library(DIMORA)
+library(fastDummies)
+library(dplyr)
+library("xts")
+library(ggplot2)
+farming <- read.csv(file = './farming.csv')
+```
+
+```{r}
+#return year-gdp for a specific country
+country_gdp <- function(country_name){
+  country_subset = farming[farming$Area==country_name,]
+  years = c(min(country_subset$Year):max(country_subset$Year))
+  gdp = c()
+  for (y in years){
+    gdp = append(gdp,country_subset[country_subset$Year==y,]$GDP[1])
+  }
+  return(data.frame(years,gdp))
+}
+#return item dataframe for a specific country
+country_item <- function(country_name,crop){
+  country_subset = farming[(farming$Area==country_name)&(farming$Item==crop),]
+  return(data.frame(country_subset$Year,country_subset$Value))
+}
+#return subset for a country
+country_crops <- function(country_name){
+  return(farming[farming$Area==country_name,])
+}
+#return change subset for a specific country and a specific item if given
+country_item_increase <- function(country_name,crop=""){
+  if (crop==""){
+    country_subset = farming[farming$Area==country_name,]
+  }
+  else{
+    country_subset = farming[(farming$Area==country_name)&(farming$Item==crop),]
+  }
+  years = c(min(country_subset$Year):max(country_subset$Year))
+  change = c()
+  for (y in years){
+    change = append(change,mean(country_subset[country_subset$Year==y,]$Increase))
+  }
+  return(data.frame(years,change))
+}
+#return dataframe of the country with aggreagate value by year and type
+agg_item<-function(country){
+  subfarming <- farming[farming$Area==country,]
+  subfarming<-aggregate(Value ~ Year+type, data=subfarming, FUN=sum)
+  subfarming <- dummy_cols(subfarming)
+  crops_types <-subfarming$type[!duplicated(subfarming$type)]
+  names(subfarming)<-c("Year","type","Value",crops_types)
+  for (i in crops_types){
+    subfarming[subfarming[names(subfarming)==i]==1,i] = subfarming[subfarming[names(subfarming)==i]==1,"Value"]
+  }
+  df <- data.frame(c(min(subfarming$Year):max(subfarming$Year)))
+  names(df)<-"Year"
+  for (i in crops_types){
+    df2=(subfarming[subfarming[names(subfarming)==i]!=0,c("Year",i)])
+    df<-merge(df,df2,by="Year",all.x = TRUE)
+    }
+  df[is.na(df)] <- 0
+  df$Year<-as.Date(as.character(df$Year),format="%Y")
+  return(df)
+}
+```
+
+```{r}
+it<-agg_item("Italy")
+it
+```
+
+
+```{r}
+df <- xts(it[,2:5],it$Year)
+ggplot(mapping = aes(x = Index, y = Value)) +
+  geom_line(data = fortify(df$cereals, melt = TRUE), aes(color = "cereals")) + 
+  geom_line(data = fortify(df$fibres, melt = TRUE), aes(color = "fibres")) + 
+  geom_line(data = fortify(df$fruit_vegetables, melt = TRUE), aes(color = "fruit_vegetables")) +
+  geom_line(data = fortify(df$herbs, melt = TRUE), aes(color = "herbs")) +
+  xlab("Year") + ylab("Tonnes")
+```
+
+
+
