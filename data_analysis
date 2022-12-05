@@ -4,6 +4,10 @@ author: "Myself"
 date: "19/11/2022"
 output: html_document
 ---
+#introduzione - descrizione dei dataset,
+#selezionare paesi in base al gdp (ricchi-medi-poveri) e vedere le differenze delle colture
+#correlation matrix gdp~colture
+#epilogo - enfatizzare monopolio di carni e cereali 
 
 ```{r}
 library(readxl)
