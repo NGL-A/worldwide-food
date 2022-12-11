@@ -96,3 +96,11 @@ ggplot(mapping = aes(x = Index, y = Value)) +
 
 
 
+```{r}
+farm.corr %>%
+  select(farming$Year, farming$Value, farming$Previous_value, farming$Increase, farming$GDP, farming$Previous_GDP, farming$Increase_GDP, farming$Pop, farming$Previous_Pop, farming$Increase_Pop, farming$Agg, farming$AverageTemperature)
+farm.corr <- farming
+#names(farm.corr)[names(farm.corr) == "long_column_name"] <- "short_name"
+cor <- cor(farm.corr[4, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 18])
+corrplot(cor, type = 'upper', tl.cex = 0.5)
+```
