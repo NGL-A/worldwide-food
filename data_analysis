@@ -18,6 +18,7 @@ library(fastDummies)
 library(dplyr)
 library("xts")
 library(ggplot2)
+library(corrplot)
 farming <- read.csv(file = './farming.csv')
 ```
 
@@ -25,12 +26,12 @@ farming <- read.csv(file = './farming.csv')
 #return year-gdp for a specific country
 country_gdp <- function(country_name){
   country_subset = farming[farming$Area==country_name,]
-  years = c(min(country_subset$Year):max(country_subset$Year))
+  Year = c(min(country_subset$Year):max(country_subset$Year))
   gdp = c()
-  for (y in years){
+  for (y in Year){
     gdp = append(gdp,country_subset[country_subset$Year==y,]$GDP[1])
   }
-  return(data.frame(years,gdp))
+  return(data.frame(Year,gdp))
 }
 #return item dataframe for a specific country
 country_item <- function(country_name,crop){
@@ -73,6 +74,9 @@ agg_item<-function(country){
     df<-merge(df,df2,by="Year",all.x = TRUE)
     }
   df[is.na(df)] <- 0
+  df=merge.data.frame(df,country_gdp(country),by="Year")
+  colnames(df)[colnames(df) == 'fruit_vegetables'] <- 'fr_veg'
+  colnames(df)[colnames(df) == 'mushrooms'] <- 'ms'
   df$Year<-as.Date(as.character(df$Year),format="%Y")
   return(df)
 }
@@ -82,7 +86,11 @@ agg_item<-function(country){
 it<-agg_item("Italy")
 it
 ```
-
+```{r}
+cor=cor(it[,-1])
+corrplot(cor,is.corr = TRUE,type="upper",order = 'AOE')
+corrplot(cor,is.corr = TRUE,type="upper",order = 'AOE',method = 'number',number.cex = 0.75)
+```
 
 ```{r}
 df <- xts(it[,2:5],it$Year)
