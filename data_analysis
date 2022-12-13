@@ -33,6 +33,16 @@ country_gdp <- function(country_name){
   }
   return(data.frame(Year,gdp))
 }
+#return year-pop for a specific country
+country_pop <- function(country_name){
+  country_subset = farming[farming$Area==country_name,]
+  Year = c(min(country_subset$Year):max(country_subset$Year))
+  pop = c()
+  for (y in Year){
+    pop = append(pop,country_subset[country_subset$Year==y,]$Pop[1])
+  }
+  return(data.frame(Year,pop))
+}
 #return item dataframe for a specific country
 country_item <- function(country_name,crop){
   country_subset = farming[(farming$Area==country_name)&(farming$Item==crop),]
@@ -75,6 +85,7 @@ agg_item<-function(country){
     }
   df[is.na(df)] <- 0
   df=merge.data.frame(df,country_gdp(country),by="Year")
+  df=merge.data.frame(df,country_pop(country),by="Year")
   colnames(df)[colnames(df) == 'fruit_vegetables'] <- 'fr_veg'
   colnames(df)[colnames(df) == 'mushrooms'] <- 'ms'
   df$Year<-as.Date(as.character(df$Year),format="%Y")
@@ -84,22 +95,32 @@ agg_item<-function(country){
 
 ```{r}
 it<-agg_item("Italy")
-it
+fr<-agg_item("France")
 ```
 ```{r}
 cor=cor(it[,-1])
-corrplot(cor,is.corr = TRUE,type="upper",order = 'AOE')
+corrplot(cor,is.corr = TRUE,type="upper")
+corrplot(cor,is.corr = TRUE,type="upper",order = 'AOE',method = 'number',number.cex = 0.75)
+cor=cor(fr[,-1])
+corrplot(cor,is.corr = TRUE,type="upper")
 corrplot(cor,is.corr = TRUE,type="upper",order = 'AOE',method = 'number',number.cex = 0.75)
 ```
 
 ```{r}
-df <- xts(it[,2:5],it$Year)
+df <- xts(it[,2:14],it$Year)
 ggplot(mapping = aes(x = Index, y = Value)) +
-  geom_line(data = fortify(df$cereals, melt = TRUE), aes(color = "cereals")) + 
+  #geom_line(data = fortify(df$cereals, melt = TRUE), aes(color = "cereals")) + 
   geom_line(data = fortify(df$fibres, melt = TRUE), aes(color = "fibres")) + 
-  geom_line(data = fortify(df$fruit_vegetables, melt = TRUE), aes(color = "fruit_vegetables")) +
+  #geom_line(data = fortify(df$fr_veg, melt = TRUE), aes(color = "fr_veg")) +
   geom_line(data = fortify(df$herbs, melt = TRUE), aes(color = "herbs")) +
-  xlab("Year") + ylab("Tonnes")
+  geom_line(data = fortify(df$legumes, melt = TRUE), aes(color = "legumes")) +
+  #geom_line(data = fortify(df$Live, melt = TRUE), aes(color = "Live")) +
+  geom_line(data = fortify(df$ms, melt = TRUE), aes(color = "ms")) +
+  geom_line(data = fortify(df$nuts, melt = TRUE), aes(color = "nuts")) +
+  geom_line(data = fortify(df$oils, melt = TRUE), aes(color = "oils")) +
+  geom_line(data = fortify(df$other, melt = TRUE), aes(color = "other")) +
+  geom_line(data = fortify(df$tubers, melt = TRUE), aes(color = "tubers")) +
+  xlab("Year") + ylab("Tons")
 ```
 
 
