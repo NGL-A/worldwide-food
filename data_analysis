@@ -99,10 +99,10 @@ fr<-agg_item("France")
 ```
 ```{r}
 cor=cor(it[,-1])
-corrplot(cor,is.corr = TRUE,type="upper")
+corrplot(cor,is.corr = TRUE,type="upper",title="IT",mar=c(0,0,1,0))
 corrplot(cor,is.corr = TRUE,type="upper",order = 'AOE',method = 'number',number.cex = 0.75)
 cor=cor(fr[,-1])
-corrplot(cor,is.corr = TRUE,type="upper")
+corrplot(cor,is.corr = TRUE,type="upper",title="FR",mar=c(0,0,1,0))
 corrplot(cor,is.corr = TRUE,type="upper",order = 'AOE',method = 'number',number.cex = 0.75)
 ```
 
