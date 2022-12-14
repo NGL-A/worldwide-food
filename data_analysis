@@ -67,7 +67,7 @@ country_item_increase <- function(country_name,crop=""){
   }
   return(data.frame(years,change))
 }
-#return dataframe of the country with aggreagate value by year and type
+#return dataframe of the country with aggreagate value by year and type,gpd,pop
 agg_item<-function(country){
   subfarming <- farming[farming$Area==country,]
   subfarming<-aggregate(Value ~ Year+type, data=subfarming, FUN=sum)
@@ -95,8 +95,11 @@ agg_item<-function(country){
 
 ```{r}
 it<-agg_item("Italy")
+it
 fr<-agg_item("France")
+fr
 ```
+
 ```{r}
 cor=cor(it[,-1])
 corrplot(cor,is.corr = TRUE,type="upper",title="IT",mar=c(0,0,1,0))
@@ -105,6 +108,7 @@ cor=cor(fr[,-1])
 corrplot(cor,is.corr = TRUE,type="upper",title="FR",mar=c(0,0,1,0))
 corrplot(cor,is.corr = TRUE,type="upper",order = 'AOE',method = 'number',number.cex = 0.75)
 ```
+
 
 ```{r}
 df <- xts(it[,2:14],it$Year)
@@ -121,6 +125,69 @@ ggplot(mapping = aes(x = Index, y = Value)) +
   geom_line(data = fortify(df$other, melt = TRUE), aes(color = "other")) +
   geom_line(data = fortify(df$tubers, melt = TRUE), aes(color = "tubers")) +
   xlab("Year") + ylab("Tons")
+```
+```{r}
+#Time Series linear model for gdp
+plot(it$Year,it$gdp)
+Acf(it$gdp)
+gdp.ts <- ts(it$gdp)
+fitts<- tslm(gdp.ts~trend)
+summary(fitts)
+dwtest(fitts)
+ts.plot(it$gdp)
+abline(fitts)
+resfitts<- residuals(fitts)
+plot(resfitts,xlab="Time", ylab="residuals")
+Acf(resfitts)
+```
+
+
+```{r}
+#Bass Model for GDP
+fitbm<-BM(it$gdp)
+summary(fitbm)
+predbm<-predict(fitbm,newx=c(0:60))
+predbm_inst<-make.instantaneous(predbm)
+plot(it$gdp,type="b",xlab="Year",ylab="Annual GDP")
+lines(predbm_inst,col=2)
+
+fitbm50<-BM(it$gdp[0:(dim(it)[1]/2)],display = T)
+pred_bm50<- predict(fitbm50, newx=c(1:50))
+pred.inst50<- make.instantaneous(pred_bm50)
+fitbm75<-BM(it$gdp[0:(dim(it)[1]/4)],display = T)
+pred_bm75<- predict(fitbm75, newx=c(1:50))
+pred.inst75<- make.instantaneous(pred_bm75)
+
+plot(it$gdp, type= "b",xlab="Year", ylab="Gdp",  pch=16, lty=3, xaxt="n", cex=0.6)
+#axis(1, at=c(1,10,19,28,37), labels=music$year[c(1,10,19,28,37)])
+lines(pred.inst75, lwd=2, col="red")
+lines(pred.inst50, lwd=2, col="green")
+lines(predbm_inst, lwd=2, col="blue")
+```
+
+```{r}
+#GBM with 1 rectangular shock
+GBMr1<- GBM(it$gdp,shock = "rett",nshock = 1,prelimestimates = c(8.950309e+13, 7.349142e-04, 9.264023e-02, 40,50,+0.5))
+summary(GBMr1)
+```
+```{r}
+GBMe1<- GBM(it$gdp,shock = "exp",nshock = 1,prelimestimates = c(8.950309e+13, 7.349142e-04, 9.264023e-02, 35,-0.1,0.1))
+summary(GBMe1)
+pred_GBMe1<- predict(GBMe1, newx=c(1:60))
+pred_GBMe1.inst<- make.instantaneous(pred_GBMe1)
+plot(it$gdp, type= "b",xlab="Year", ylab="GDP",  pch=16, lty=3, cex=0.6, xlim=c(1,60))
+lines(pred_GBMe1.inst, lwd=2, col=2)
+```
+
+```{r}
+GGM_gdp<- GGM(it$gdp, prelimestimates=c(8.950309e+13, 0.001, 0.01, 7.349142e-04, 9.264023e-02))
+summary(GGM_gdp)
+pred_GGM<- predict(GGM_gdp, newx=c(1:60))
+pred_GGM.inst<- make.instantaneous(pred_GGM)
+plot(it$gdp, type= "b",xlab="Year", ylab="GDP",  pch=16, lty=3, cex=0.6, xlim=c(1,60))
+lines(pred_GGM.inst, lwd=2, col=2)
+lines(predbm_inst, lwd=2, col=3)
+Acf(residuals(GGM_gdp))
 ```
 
 
