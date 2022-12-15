@@ -5,9 +5,9 @@ date: "19/11/2022"
 output: html_document
 ---
 #introduzione - descrizione dei dataset,
-#selezionare paesi in base al gdp (ricchi-medi-poveri) e vedere le differenze delle colture
-#correlation matrix gdp~colture
 #epilogo - enfatizzare monopolio di carni e cereali 
+#Usare stepwise regression per trovare le feature ideali da utilizzare negli altri modelli
+#Usare baggin/boosting
 
 ```{r}
 library(readxl)
@@ -92,40 +92,62 @@ agg_item<-function(country){
   return(df)
 }
 ```
+```{r}
+#Plot the correlation matricex for the dataset of the country given
+corcountry <- function(country_subset){
+  cor=cor(country_subset[,-1])
+  corrplot(cor,is.corr = TRUE,type="upper",title=comment(country_subset),mar=c(0,0,1,0))
+  corrplot(cor,is.corr = TRUE,type="upper",title=comment(country_subset),method = 'number',number.cex = 0.75,mar=c(0,0,1,0))
+}
+#Plot 3 ggplots for coltivations,gdp and population for the country given
+ggplots<-function(country_subset){
+  d=dim(country_subset)[2]
+  df <- xts(country_subset[,2:d],country_subset$Year)
+  list(ggplot(mapping = aes(x = Index, y = Value)) +
+    geom_line(data = fortify(df$cereals, melt = TRUE), aes(color = "cereals")) + 
+    geom_line(data = fortify(df$fibres, melt = TRUE), aes(color = "fibres")) + 
+    #geom_line(data = fortify(df$fr_veg, melt = TRUE), aes(color = "fr_veg")) +
+    geom_line(data = fortify(df$herbs, melt = TRUE), aes(color = "herbs")) +
+    geom_line(data = fortify(df$legumes, melt = TRUE), aes(color = "legumes")) +
+    #geom_line(data = fortify(df$Live, melt = TRUE), aes(color = "Live")) +
+    geom_line(data = fortify(df$ms, melt = TRUE), aes(color = "ms")) +
+    geom_line(data = fortify(df$nuts, melt = TRUE), aes(color = "nuts")) +
+    geom_line(data = fortify(df$oils, melt = TRUE), aes(color = "oils")) +
+    geom_line(data = fortify(df$other, melt = TRUE), aes(color = "other")) +
+    geom_line(data = fortify(df$tubers, melt = TRUE), aes(color = "tubers")) +
+    xlab("Year") + ylab("Tons"),
+  ggplot(mapping = aes(x = Index, y = Value)) +
+    geom_line(data = fortify(df$gdp, melt = TRUE), aes(color = "GDP")) + 
+    xlab("Year") + ylab("Gdp"),
+  ggplot(mapping = aes(x = Index, y = Value)) +
+    geom_line(data = fortify(df$pop, melt = TRUE), aes(color = "Population")) + 
+    xlab("Year") + ylab("Population"))
+}
+```
 
 ```{r}
 it<-agg_item("Italy")
-it
 fr<-agg_item("France")
-fr
+cn<-agg_item("China")
+br<-agg_item("Brazil")
+rf<-agg_item("Russian Federation")
+id<-agg_item("India")
+comment(it) <-"it"
+comment(fr) <-"fr"
+comment(cn) <-"cn"
+comment(br) <-"br"
+comment(rf) <-"rf"
+comment(id) <-"id"
 ```
 
 ```{r}
-cor=cor(it[,-1])
-corrplot(cor,is.corr = TRUE,type="upper",title="IT",mar=c(0,0,1,0))
-corrplot(cor,is.corr = TRUE,type="upper",order = 'AOE',method = 'number',number.cex = 0.75)
-cor=cor(fr[,-1])
-corrplot(cor,is.corr = TRUE,type="upper",title="FR",mar=c(0,0,1,0))
-corrplot(cor,is.corr = TRUE,type="upper",order = 'AOE',method = 'number',number.cex = 0.75)
+corcountry(it)
 ```
-
 
 ```{r}
-df <- xts(it[,2:14],it$Year)
-ggplot(mapping = aes(x = Index, y = Value)) +
-  #geom_line(data = fortify(df$cereals, melt = TRUE), aes(color = "cereals")) + 
-  geom_line(data = fortify(df$fibres, melt = TRUE), aes(color = "fibres")) + 
-  #geom_line(data = fortify(df$fr_veg, melt = TRUE), aes(color = "fr_veg")) +
-  geom_line(data = fortify(df$herbs, melt = TRUE), aes(color = "herbs")) +
-  geom_line(data = fortify(df$legumes, melt = TRUE), aes(color = "legumes")) +
-  #geom_line(data = fortify(df$Live, melt = TRUE), aes(color = "Live")) +
-  geom_line(data = fortify(df$ms, melt = TRUE), aes(color = "ms")) +
-  geom_line(data = fortify(df$nuts, melt = TRUE), aes(color = "nuts")) +
-  geom_line(data = fortify(df$oils, melt = TRUE), aes(color = "oils")) +
-  geom_line(data = fortify(df$other, melt = TRUE), aes(color = "other")) +
-  geom_line(data = fortify(df$tubers, melt = TRUE), aes(color = "tubers")) +
-  xlab("Year") + ylab("Tons")
+ggplots(it)
 ```
+
 ```{r}
 #Time Series linear model for gdp
 plot(it$Year,it$gdp)
