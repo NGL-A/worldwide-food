@@ -19,8 +19,10 @@ library(dplyr)
 library("xts")
 library(ggplot2)
 library(corrplot)
+library(car)
 farming <- read.csv(file = './farming.csv')
 ```
+
 
 ```{r}
 #return year-gdp for a specific country
@@ -67,7 +69,7 @@ country_item_increase <- function(country_name,crop=""){
   }
   return(data.frame(years,change))
 }
-#return dataframe of the country with aggreagate value by year and type,gpd,pop
+#return dataframe of the country with aggregate value by year and type,gpd,pop
 agg_item<-function(country){
   subfarming <- farming[farming$Area==country,]
   subfarming<-aggregate(Value ~ Year+type, data=subfarming, FUN=sum)
@@ -94,7 +96,7 @@ agg_item<-function(country){
 ```
 
 ```{r}
-#Plot the correlation matricex for the dataset of the country given
+#Plot the correlation matrix for the dataset of the country given
 corcountry <- function(country_subset){
   cor=cor(country_subset[,-1])
   corrplot(cor,is.corr = TRUE,type="upper",title=comment(country_subset),mar=c(0,0,1,0))
@@ -136,7 +138,15 @@ tslm_gdp<-function(country){
   plot(resfitts,xlab="Time", ylab="residuals")
   Acf(resfitts)
 }
+#transform quantitative variables in log scale
+logscale<-function(country){
+  country[country==0]=1
+  cols <- c("cereals","fibres","fr_veg","herbs","legumes","Live","ms","nuts","oils","other","tubers","gdp","pop")
+  country[cols] <- log(country[cols])
+  return(country)
+}
 ```
+
 
 ```{r}
 it<-agg_item("Italy")
@@ -196,19 +206,8 @@ for(i in c(11:13)){
 ```
 
 ```{r}
-#transform quantitative variables in log scale
-it$cereals <- log(it$cereals)
-it$fibres <- log(it$fibres)
-it$fr_veg <- log(it$fr_veg)
-it$herbs <- log(it$herbs)
-it$legumes <- log(it$legumes)
-it$Live <- log(it$Live)
-it$ms <- log(it$ms)
-it$nuts <- log(it$nuts)
-it$oils <- log(it$oils)
-it$other <- log(it$other)
-it$tubers <- log(it$tubers)
-it$gdp <- log(it$gdp)
+it<-logscale(it)
+
 par(mfrow=c(1,3))
 for(i in c(2:4)){
   hist(it[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
@@ -228,16 +227,20 @@ for(i in c(11:13)){
 ```
 
 ```{r}
-# Stepwise Regression
-it$other[it$other==-Inf]=0
 m1 <- lm(gdp~.-pop-Year, data=it)
-#model selected is the one with best performance in AIC
+summary(m1)
+vif(m1)
+vif_values <- vif(m1)
+#create horizontal bar chart to display each VIF value
+barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue",las=1)
+abline(v = 5, lwd = 3, lty = 2)
+```
+
+```{r}
+it<-it[,c("Year","gdp",names(vif_values[vif_values<5]),"pop")]
+m1 <- lm(gdp~.-pop-Year, data=it)
 m2 <- step(m1, direction="both",trace = 0)
-m3 <- step(m1, direction="forward",trace = 0)
-m4 <- step(m1, direction="backward",trace = 0)
 summary(m2)
-summary(m3)
-summary(m4)
 ```
 
 
