@@ -4,10 +4,13 @@ author: "Myself"
 date: "19/11/2022"
 output: html_document
 ---
-#introduzione - descrizione dei dataset,
-#epilogo - enfatizzare monopolio di carni e cereali 
-#Usare stepwise regression per trovare le feature ideali da utilizzare negli altri modelli
-#Usare baggin/boosting
+Study the data of the country
+Correlation matrix to see correlation among predictors
+Use tslm as baseline, check dw
+Use linear model to get VIF and extract a subset of features
+Use Arima
+Use Arimax looking for the feature that gets the lowest AIC
+
 
 ```{r}
 library(readxl)
@@ -20,6 +23,8 @@ library("xts")
 library(ggplot2)
 library(corrplot)
 library(car)
+library(forcats)
+library(tseries)
 farming <- read.csv(file = './farming.csv')
 ```
 
@@ -93,9 +98,6 @@ agg_item<-function(country){
   df$Year<-as.Date(as.character(df$Year),format="%Y")
   return(df)
 }
-```
-
-```{r}
 #Plot the correlation matrix for the dataset of the country given
 corcountry <- function(country_subset){
   cor=cor(country_subset[,-1])
@@ -127,66 +129,142 @@ ggplots<-function(country_subset){
     xlab("Year") + ylab("Population")+ggtitle('Population growth'))
 }
 #Time Series linear model for gdp
+#If the R squared is very high but the value of DWTest is near 0 that means there is a positive autocorrelation among the residuals at lag 1
+#If checking the plot of the residuals they do not have a perfect harmonic behaviour but we can see a trend, it is a symbol of a positive autocorrelation
 tslm_gdp<-function(country){
   gdp.ts <- ts(country$gdp)
   fitts<- tslm(gdp.ts~trend)
   print(summary(fitts))
-  print(dwtest(fitts))#if close to 0 there is positive autocorrelation among the residuals at lag 1 (kind of natural since we are using trend)
+  print(dwtest(fitts))
   ts.plot(country$gdp)
-  abline(fitts)
+  abline(fitts,col=3)
   resfitts<- residuals(fitts)
   plot(resfitts,xlab="Time", ylab="residuals")
   Acf(resfitts)
+  AIC(fitts)
 }
 #transform quantitative variables in log scale
 logscale<-function(country){
   country[country==0]=1
-  cols <- c("cereals","fibres","fr_veg","herbs","legumes","Live","ms","nuts","oils","other","tubers","gdp","pop")
+  cols <- names(us)
+  cols<-cols[-1]#remove Year
   country[cols] <- log(country[cols])
   return(country)
+}
+#perform a selection of the features based on the vif
+lm_vif<-function(country){
+  m1 <- lm(gdp~.-Year, data=country)
+  print(summary(m1))
+  vif_values <- vif(m1)
+  #create horizontal bar chart to display each VIF value
+  barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue",las=1)
+  abline(v = 5, lwd = 3, lty = 2)
+  #keep only the variables with VIF<5
+  country<-country[,c("Year","gdp",names(vif_values[vif_values<5]))]
+  m1 <- lm(gdp~.-Year, data=country)
+  m2 <- step(m1, direction="both",trace = 0)
+  print(dwtest(m2, alt="two.sided"))
+  #we should achieve a better DW value than the one obtained with the model based only on trend
+  ts.plot(country$gdp)
+  lines(fitted(m2), col=2)
+  #now we shouldn't see a trend on the residuals
+  checkresiduals(m2)
+  AIC(m2)
+  return(country)
+}
+#Auto Arima model
+get_arima<-function(country){
+  auto.a<- auto.arima(country$gdp)
+  print(autoplot(forecast(auto.a)))
+  checkresiduals(auto.a) #if residuals are normally distributed OK
+  print(AIC(auto.a))
+}
+#Auto Arima with external regressor
+get_arimax<-function(country){
+  x<-colnames(country)[-c(1,2)]
+  for (i in x){
+    y=country[,names(country)==i]
+    armax<- auto.arima(country$gdp, xreg=y)
+    checkresiduals(armax)
+    plot(country$gdp)
+    lines(fitted(armax), col=2)
+    print(i)
+    print(AIC(armax))
+    }
 }
 ```
 
 
 ```{r}
 it<-agg_item("Italy")
-gr<-agg_item("Germany")
+fr<-agg_item("France")
 us<-agg_item("United States")
 cn<-agg_item("China")
 br<-agg_item("Brazil")
 id<-agg_item("India")
 comment(it) <-"Italy"
-comment(gr) <-"gr"
-comment(us) <-"us"
-comment(cn) <-"cn"
-comment(br) <-"br"
-comment(id) <-"id"
+comment(fr) <-"France"
+comment(us) <-"United States"
+comment(cn) <-"China"
+comment(br) <-"Brazil"
+comment(id) <-"India"
 ```
 
 ```{r}
-#there is no white noise for the GDP of the countries
-Acf(it$gdp,main="Autocorrelation")
-Acf(gr$gdp,main="Autocorrelation")
-Acf(us$gdp,main="Autocorrelation")
-Acf(cn$gdp,main="Autocorrelation")
-Acf(br$gdp,main="Autocorrelation")
-Acf(id$gdp,main="Autocorrelation")
+columns = c("Year","gdp","country") 
+df = data.frame(matrix(nrow = 0, ncol = length(columns))) 
+colnames(df) = columns
+dd<-it[,c("Year","gdp")]
+dd$country<-"Italy"
+df<-rbind(df,dd)
+dd<-fr[,c("Year","gdp")]
+dd$country<-"France"
+df<-rbind(df,dd)
+dd<-us[,c("Year","gdp")]
+dd$country<-"United States"
+df<-rbind(df,dd)
+dd<-cn[,c("Year","gdp")]
+dd$country<-"China"
+df<-rbind(df,dd)
+dd<-id[,c("Year","gdp")]
+dd$country<-"India"
+df<-rbind(df,dd)
+dd<-br[,c("Year","gdp")]
+dd$country<-"Brazil"
+df<-rbind(df,dd)
+df
+df %>%
+  mutate(class = fct_reorder(country, gdp, .fun='median')) %>%
+  ggplot( aes(x=reorder(country, gdp), y=gdp, fill=country)) + 
+    geom_boxplot() +
+    xlab("Country") + ylab("Gdp")+ggtitle('Median GPD by Country')+
+    theme(legend.position="none")
+df$Year<-as.character(format(df$Year,'%Y'))
+df %>%
+  mutate(class = fct_reorder(Year, gdp, .fun='median')) %>%
+  ggplot( aes(x=reorder(Year, gdp), y=gdp, fill=Year)) + 
+    geom_boxplot() +
+    xlab("Year") + ylab("Gdp")+ggtitle('Median GPD by Year')+
+    theme(legend.position="none")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+#Google "when did the transfer of industries to china started", it explains the outliers for china and india are not really outliers
 ```
 
 ```{r}
-corcountry(it)
-```
-
-```{r}
+#per Francia mettere # nella funzione ggplots per other
+#per Brasile mettere # nella funzione ggplots per ms
+#per USA mettere # nella funzione ggplots per fibres
 ggplots(it)
 ```
 
 
 ```{r}
-tslm_gdp(id)
+corcountry(it)
 ```
 
+
 ```{r}
+#check the data by histograms
+summary(it$gdp)
 par(mfrow=c(1,3))
 for(i in c(2:4)){
   hist(it[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
@@ -203,77 +281,134 @@ par(mfrow=c(1,3))
 for(i in c(11:13)){
   hist(it[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
 }
-```
-
-```{r}
-it<-logscale(it)
+#since we are working with high value features, we apply a log transformation
+it_log<-logscale(it)
 
 par(mfrow=c(1,3))
 for(i in c(2:4)){
-  hist(it[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
+  hist(it_log[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
 }
 par(mfrow=c(1,3))
 for(i in c(5:7)){
-  hist(it[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
+  hist(it_log[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
 }
 par(mfrow=c(1,3))
 for(i in c(8:10)){
-  hist(it[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
+  hist(it_log[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
 }
 par(mfrow=c(1,3))
 for(i in c(11:13)){
-  hist(it[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
+  hist(it_log[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
 }
 ```
 
 ```{r}
-m1 <- lm(gdp~.-pop-Year, data=it)
-summary(m1)
-vif(m1)
-vif_values <- vif(m1)
-#create horizontal bar chart to display each VIF value
-barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue",las=1)
-abline(v = 5, lwd = 3, lty = 2)
+tslm_gdp(it)
+tslm_gdp(it_log)
 ```
 
 ```{r}
-it<-it[,c("Year","gdp",names(vif_values[vif_values<5]),"pop")]
-m1 <- lm(gdp~.-pop-Year, data=it)
-m2 <- step(m1, direction="both",trace = 0)
-summary(m2)
+it<-lm_vif(it)
+it_log<-lm_vif(it_log)
+```
+
+```{r}
+#ARIMA
+#test to see if the time series is stationary for the gdp
+#We reject the null hypothesis of stationary if the p-value is smaller than 0.05.
+#(the p-value is always >0.05 for all the countries, the series are not stationary)
+adf.test(it$gdp)
+adf.test(it_log$gdp)
+#check if the time series has white noise
+#check how long is the tail, how many lags it takes for the bars to get below the line of the white noise
+#other check for seasonality, the ACF plot usually reveals definitive repeated spikes at the multiples of the seasonal window.
+tsdisplay(it$gdp)
+tsdisplay(it_log$gdp)
+```
+
+```{r}
+get_arima(it)
+get_arima(it_log)
+#arima with lowest AIC is the best
+```
+
+```{r}
+get_arimax(it_log)
 ```
 
 
-```{r}
-#Bass Model for GDP
-fitbm<-BM(it$gdp)
-summary(fitbm)
-predbm<-predict(fitbm,newx=c(0:60))
-predbm_inst<-make.instantaneous(predbm)
-plot(it$gdp,type="b",xlab="Year",ylab="Annual GDP")
-lines(predbm_inst,col=2)
 
-fitbm50<-BM(it$gdp[0:(dim(it)[1]/2)],display = T)
-pred_bm50<- predict(fitbm50, newx=c(1:50))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+###a better plot of the yearly time series
+plot(it$gdp, type= "b",xlab="Year", ylab="Annual Gdp",  pch=16, lty=3, xaxt="n", cex=0.6)
+axis(1, at=c(1,15,30,45,60), labels=it$Year[c(1,15,30,45,60)])
+
+bm_gdp<-BM(it$gdp,display = T)
+summary(bm_gdp)
+pred_bm<- predict(bm_gdp, newx=c(1:50))#cumulative
+pred.inst<- make.instantaneous(pred_bm)#instantaneous
+
+###we estimate the model with 50% of the data
+bm_gdp50<-BM(it$gdp[0:(dim(it)[1]/2)],display = T)
+summary(bm_gdp50)
+pred_bm50<- predict(bm_gdp50, newx=c(1:50))
 pred.inst50<- make.instantaneous(pred_bm50)
-fitbm75<-BM(it$gdp[0:(dim(it)[1]/4)],display = T)
-pred_bm75<- predict(fitbm75, newx=c(1:50))
+
+###we estimate the model with 25% of the data
+bm_gdp75<-BM(it$gdp[0:(dim(it)[1]/4)],display = T)
+summary(bm_gdp75)
+pred_bm75<- predict(bm_gdp75, newx=c(1:50))
 pred.inst75<- make.instantaneous(pred_bm75)
 
-plot(it$gdp, type= "b",xlab="Year", ylab="Gdp",  pch=16, lty=3, xaxt="n", cex=0.6)
-#axis(1, at=c(1,10,19,28,37), labels=music$year[c(1,10,19,28,37)])
-lines(pred.inst75, lwd=2, col="red")
-lines(pred.inst50, lwd=2, col="green")
-lines(predbm_inst, lwd=2, col="blue")
+###plot of fitted model 
+plot(it$gdp, type= "b",xlab="Year", ylab="Annual Gdp",  pch=16, lty=3, xaxt="n", cex=0.6)
+axis(1, at=c(1,15,30,45,60), labels=it$Year[c(1,15,30,45,60)])
+lines(pred.inst75, lwd=2, col=2)
+lines(pred.inst50, lwd=2, col=3)
+lines(pred.inst, lwd=2, col=4)
+
+###Comparison between models (cumulative)
+plot(cumsum(it$gdp), type= "b",xlab="Year", ylab="Annual Gdp",  pch=16, lty=3, xaxt="n", cex=0.6)
+axis(1, at=c(1,15,30,45,60), labels=it$Year[c(1,15,30,45,60)])
+lines(pred_bm75, lwd=2, col=2)
+lines(pred_bm50, lwd=2, col=3)
+lines(pred_bm, lwd=2, col=4)
+```
+
+
+
+
+
+
+
+SE SI VUOLE UTILIZZARE GBM E GLI SHOCK BISOGNA USARE I BASS MODEL SUL DATASET SENZA LOGARITMI
+```{r}
+#GBM with 1 rectangular shock
+GBMr1<- GBM(it$gdp,shock = "rett",nshock = 1,prelimestimates = c(bm_gdp$Estimate$Estimate[1], bm_gdp$Estimate$Estimate[2], bm_gdp$Estimate$Estimate[3], 40,50,-0.5))
+summary(GBMr1)
 ```
 
 ```{r}
-#GBM with 1 rectangular shock
-GBMr1<- GBM(it$gdp,shock = "rett",nshock = 1,prelimestimates = c(8.950309e+13, 7.349142e-04, 9.264023e-02, 40,50,+0.5))
-summary(GBMr1)
-```
-```{r}
-GBMe1<- GBM(it$gdp,shock = "exp",nshock = 1,prelimestimates = c(8.950309e+13, 7.349142e-04, 9.264023e-02, 35,-0.1,0.1))
+GBMe1<- GBM(it$gdp,shock = "exp",nshock = 1,prelimestimates = c(bm_gdp$Estimate$Estimate[1], bm_gdp$Estimate$Estimate[2], bm_gdp$Estimate$Estimate[3], 35,-0.1,0.1))
 summary(GBMe1)
 pred_GBMe1<- predict(GBMe1, newx=c(1:60))
 pred_GBMe1.inst<- make.instantaneous(pred_GBMe1)
@@ -282,7 +417,7 @@ lines(pred_GBMe1.inst, lwd=2, col=2)
 ```
 
 ```{r}
-GGM_gdp<- GGM(it$gdp, prelimestimates=c(8.950309e+13, 0.001, 0.01, 7.349142e-04, 9.264023e-02))
+GGM_gdp<- GGM(it$gdp, prelimestimates=c(bm_gdp$Estimate$Estimate[1], 0.001, 0.01, bm_gdp$Estimate$Estimate[2], bm_gdp$Estimate$Estimate[3]))
 summary(GGM_gdp)
 pred_GGM<- predict(GGM_gdp, newx=c(1:60))
 pred_GGM.inst<- make.instantaneous(pred_GGM)
@@ -291,6 +426,13 @@ lines(pred_GGM.inst, lwd=2, col=2)
 lines(predbm_inst, lwd=2, col=3)
 Acf(residuals(GGM_gdp))
 ```
+
+```{r}
+ucrcdNR<-UCRCD(it$gdp,it$cereals)
+summary(ucrcdNR)
+```
+
+
 
 
 
