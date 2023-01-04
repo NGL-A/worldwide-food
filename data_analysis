@@ -253,7 +253,7 @@ df %>%
 #per Francia mettere # nella funzione ggplots per other
 #per Brasile mettere # nella funzione ggplots per ms
 #per USA mettere # nella funzione ggplots per fibres
-ggplot(it)
+ggplots(it)
 ```
 
 
