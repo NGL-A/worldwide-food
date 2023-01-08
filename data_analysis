@@ -11,6 +11,8 @@ Use linear model to get VIF and extract a subset of features
 Use Arima
 Use Arimax looking for the feature that gets the lowest AIC
 
+ACf has significant correlation -> trend
+F -> significance of the model, if>4 good
 
 ```{r}
 library(readxl)
@@ -109,23 +111,23 @@ ggplots<-function(country_subset){
   d=dim(country_subset)[2]
   df <- xts(country_subset[,2:d],country_subset$Year)
   list(ggplot(mapping = aes(x = Index, y = Value)) +
-    geom_line(data = fortify(df$cereals, melt = TRUE), aes(color = "cereals")) + 
-    geom_line(data = fortify(df$fibres, melt = TRUE), aes(color = "fibres")) + 
-    #geom_line(data = fortify(df$fr_veg, melt = TRUE), aes(color = "fr_veg")) +
-    geom_line(data = fortify(df$herbs, melt = TRUE), aes(color = "herbs")) +
-    geom_line(data = fortify(df$legumes, melt = TRUE), aes(color = "legumes")) +
-    #geom_line(data = fortify(df$Live, melt = TRUE), aes(color = "Live")) +
-    geom_line(data = fortify(df$ms, melt = TRUE), aes(color = "ms")) +
-    geom_line(data = fortify(df$nuts, melt = TRUE), aes(color = "nuts")) +
-    geom_line(data = fortify(df$oils, melt = TRUE), aes(color = "oils")) +
-    geom_line(data = fortify(df$other, melt = TRUE), aes(color = "other")) +
-    geom_line(data = fortify(df$tubers, melt = TRUE), aes(color = "tubers")) +
+    geom_line(data = fortify(df$cereals, melt = TRUE), aes(color = "cereals"),size=1.2) + 
+    geom_line(data = fortify(df$fibres, melt = TRUE), aes(color = "fibres"),size=1.2) + 
+    #geom_line(data = fortify(df$fr_veg, melt = TRUE), aes(color = "fr_veg"),size=1.2) +
+    geom_line(data = fortify(df$herbs, melt = TRUE), aes(color = "herbs"),size=1.2) +
+    geom_line(data = fortify(df$legumes, melt = TRUE), aes(color = "legumes"),size=1.2) +
+    #geom_line(data = fortify(df$Live, melt = TRUE), aes(color = "Live"),size=1.2) +
+    geom_line(data = fortify(df$ms, melt = TRUE), aes(color = "ms"),size=1.2) +
+    geom_line(data = fortify(df$nuts, melt = TRUE), aes(color = "nuts"),size=1.2) +
+    geom_line(data = fortify(df$oils, melt = TRUE), aes(color = "oils"),size=1.2) +
+    geom_line(data = fortify(df$other, melt = TRUE), aes(color = "other"),size=1.2) +
+    geom_line(data = fortify(df$tubers, melt = TRUE), aes(color = "tubers"),size=1.2) +
     xlab("Year") + ylab("Tons")+ggtitle('Production growth'),
   ggplot(mapping = aes(x = Index, y = Value)) +
-    geom_line(data = fortify(df$gdp, melt = TRUE), aes(color = "GDP")) + 
+    geom_line(data = fortify(df$gdp, melt = TRUE), aes(color = "GDP"),size=1.2) + 
     xlab("Year") + ylab("Gdp")+ggtitle('GDP growth'),
   ggplot(mapping = aes(x = Index, y = Value)) +
-    geom_line(data = fortify(df$pop, melt = TRUE), aes(color = "Population")) + 
+    geom_line(data = fortify(df$pop, melt = TRUE), aes(color = "Population"),size=1.2) + 
     xlab("Year") + ylab("Population")+ggtitle('Population growth'))
 }
 #Time Series linear model for gdp
@@ -146,7 +148,7 @@ tslm_gdp<-function(country){
 #transform quantitative variables in log scale
 logscale<-function(country){
   country[country==0]=1
-  cols <- names(us)
+  cols <- names(country)
   cols<-cols[-1]#remove Year
   country[cols] <- log(country[cols])
   return(country)
@@ -154,7 +156,6 @@ logscale<-function(country){
 #perform a selection of the features based on the vif
 lm_vif<-function(country){
   m1 <- lm(gdp~.-Year, data=country)
-  print(summary(m1))
   vif_values <- vif(m1)
   #create horizontal bar chart to display each VIF value
   barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue",las=1)
@@ -163,13 +164,14 @@ lm_vif<-function(country){
   country<-country[,c("Year","gdp",names(vif_values[vif_values<5]))]
   m1 <- lm(gdp~.-Year, data=country)
   m2 <- step(m1, direction="both",trace = 0)
+  print(summary(m2))
+  print(AIC(m2))
   print(dwtest(m2, alt="two.sided"))
   #we should achieve a better DW value than the one obtained with the model based only on trend
   ts.plot(country$gdp)
   lines(fitted(m2), col=2)
   #now we shouldn't see a trend on the residuals
   checkresiduals(m2)
-  AIC(m2)
   return(country)
 }
 #Auto Arima model
@@ -181,6 +183,9 @@ get_arima<-function(country){
 }
 #Auto Arima with external regressor
 get_arimax<-function(country){
+  columns = c("feature","AIC")
+  df_arimax <- data.frame(matrix(nrow = 0, ncol = length(columns)))
+  colnames(df_arimax) = columns
   x<-colnames(country)[-c(1,2)]
   for (i in x){
     y=country[,names(country)==i]
@@ -188,9 +193,10 @@ get_arimax<-function(country){
     checkresiduals(armax)
     plot(country$gdp)
     lines(fitted(armax), col=2)
-    print(i)
-    print(AIC(armax))
-    }
+    df_arimax[nrow(df_arimax) + 1,1] = i
+    df_arimax[nrow(df_arimax),2] = round(AIC(armax), digits = 2)
+  }
+  return(df_arimax)
 }
 ```
 
@@ -209,6 +215,7 @@ comment(cn) <-"China"
 comment(br) <-"Brazil"
 comment(id) <-"India"
 ```
+
 
 ```{r}
 columns = c("Year","gdp","country") 
@@ -232,7 +239,6 @@ df<-rbind(df,dd)
 dd<-br[,c("Year","gdp")]
 dd$country<-"Brazil"
 df<-rbind(df,dd)
-df
 df %>%
   mutate(class = fct_reorder(country, gdp, .fun='median')) %>%
   ggplot( aes(x=reorder(country, gdp), y=gdp, fill=country)) + 
@@ -247,7 +253,53 @@ df %>%
     xlab("Year") + ylab("Gdp")+ggtitle('Median GPD by Year')+
     theme(legend.position="none")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 #Google "when did the transfer of industries to china started", it explains the outliers for china and india are not really outliers
+columns = c("Year","Italy","France","United States","China","Brazil","India") 
+df = data.frame(matrix(nrow = 60, ncol = length(columns))) 
+colnames(df) = columns
+df$Year<-it$Year
+df$Italy<-it$gdp
+df$France<-fr$gdp
+df$`United States` <-us$gdp
+df$China<-cn$gdp
+df$Brazil<-br$gdp
+df$India<-id$gdp
+d=dim(df)[2]
+df <- xts(df[,2:d],df$Year)
+ggplot(mapping = aes(x = Index, y = Value)) +
+    geom_line(data = fortify(df$Italy, melt = TRUE), aes(color = "Italy"),size=1.2) + 
+    geom_line(data = fortify(df$France, melt = TRUE), aes(color = "France"),size=1.2) + 
+    geom_line(data = fortify(df$`United States`, melt = TRUE), aes(color = "United States"),size=1.2) +
+    geom_line(data = fortify(df$China, melt = TRUE), aes(color = "China"),size=1.2) +
+    geom_line(data = fortify(df$Brazil, melt = TRUE), aes(color = "Brazil"),size=1.2) +
+    geom_line(data = fortify(df$India, melt = TRUE), aes(color = "India"),size=1.2) +
+    xlab("Year") + ylab("GDP")+ggtitle('GDP growth')
 ```
+
+```{r}
+countries_boxplots<-function(countries){
+  columns = c("Country","Item","Value") 
+  df = data.frame(matrix(nrow = 0, ncol = length(columns))) 
+  colnames(df) = columns
+  for(con in countries){
+    country<-agg_item(con)
+    cols=colnames(country)[-1]
+    for(i in cols){
+      a<-rep(con,60)
+      b<-rep(i,60)
+      c<-country[,colnames(country)==i]
+      dd <- data.frame(Country=a,Item=b,Value=c)
+      df<-rbind(df,dd)
+    }
+  }
+  ggplot(df, aes(x=Item, y=Value, fill=Country)) + 
+    geom_boxplot() +
+    facet_wrap(~Item, scale="free")
+}
+countries_boxplots(c("Italy","France"))
+countries_boxplots(c("Brazil","India","China"))
+countries_boxplots(c("China","United States"))
+```
+
 
 ```{r}
 #per Francia mettere # nella funzione ggplots per other
@@ -308,8 +360,8 @@ tslm_gdp(it_log)
 ```
 
 ```{r}
-it<-lm_vif(it)
-it_log<-lm_vif(it_log)
+it_restricted<-lm_vif(it)
+it_log_restricted<-lm_vif(it_log)
 ```
 
 ```{r}
@@ -317,23 +369,28 @@ it_log<-lm_vif(it_log)
 #test to see if the time series is stationary for the gdp
 #We reject the null hypothesis of stationary if the p-value is smaller than 0.05.
 #(the p-value is always >0.05 for all the countries, the series are not stationary)
-adf.test(it$gdp)
-adf.test(it_log$gdp)
+adf.test(it_restricted$gdp)
+adf.test(it_log_restricted$gdp)
 #check if the time series has white noise
 #check how long is the tail, how many lags it takes for the bars to get below the line of the white noise
 #other check for seasonality, the ACF plot usually reveals definitive repeated spikes at the multiples of the seasonal window.
-tsdisplay(it$gdp)
-tsdisplay(it_log$gdp)
+tsdisplay(it_restricted$gdp)
+tsdisplay(it_log_restricted$gdp)
 ```
 
 ```{r}
-get_arima(it)
-get_arima(it_log)
+get_arima(it_restricted)
+get_arima(it_log_restricted)
 #arima with lowest AIC is the best
 ```
 
 ```{r}
-get_arimax(it_log)
+armax_aics<-get_arimax(it_restricted)
+armax_aics_log<-get_arimax(it_log_restricted)
+armax_aics
+armax_aics[armax_aics$AIC==min(armax_aics$AIC),]$feature
+armax_aics_log
+armax_aics_log[armax_aics_log$AIC==min(armax_aics_log$AIC),]$feature
 ```
 
 
