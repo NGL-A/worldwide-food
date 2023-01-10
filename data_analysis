@@ -14,6 +14,8 @@ Use Arimax looking for the feature that gets the lowest AIC
 ACf has significant correlation -> trend
 F -> significance of the model, if>4 good
 
+gdp/pop->gdp per capita
+
 ```{r}
 library(readxl)
 library(lmtest) 
@@ -27,6 +29,7 @@ library(corrplot)
 library(car)
 library(forcats)
 library(tseries)
+library(lattice)
 farming <- read.csv(file = './farming.csv')
 ```
 
@@ -177,9 +180,12 @@ lm_vif<-function(country){
 #Auto Arima model
 get_arima<-function(country){
   auto.a<- auto.arima(country$gdp)
+  plot(country$gdp)
+  fit<- fitted(auto.a)
+  lines(fit, col=2)
   print(autoplot(forecast(auto.a)))
   checkresiduals(auto.a) #if residuals are normally distributed OK
-  print(AIC(auto.a))
+  print(summary(auto.a))
 }
 #Auto Arima with external regressor
 get_arimax<-function(country){
@@ -190,9 +196,9 @@ get_arimax<-function(country){
   for (i in x){
     y=country[,names(country)==i]
     armax<- auto.arima(country$gdp, xreg=y)
-    checkresiduals(armax)
     plot(country$gdp)
     lines(fitted(armax), col=2)
+    checkresiduals(armax)
     df_arimax[nrow(df_arimax) + 1,1] = i
     df_arimax[nrow(df_arimax),2] = round(AIC(armax), digits = 2)
   }
@@ -216,72 +222,111 @@ comment(br) <-"Brazil"
 comment(id) <-"India"
 ```
 
-
 ```{r}
-columns = c("Year","gdp","country") 
-df = data.frame(matrix(nrow = 0, ncol = length(columns))) 
-colnames(df) = columns
-dd<-it[,c("Year","gdp")]
-dd$country<-"Italy"
-df<-rbind(df,dd)
-dd<-fr[,c("Year","gdp")]
-dd$country<-"France"
-df<-rbind(df,dd)
-dd<-us[,c("Year","gdp")]
-dd$country<-"United States"
-df<-rbind(df,dd)
-dd<-cn[,c("Year","gdp")]
-dd$country<-"China"
-df<-rbind(df,dd)
-dd<-id[,c("Year","gdp")]
-dd$country<-"India"
-df<-rbind(df,dd)
-dd<-br[,c("Year","gdp")]
-dd$country<-"Brazil"
-df<-rbind(df,dd)
-df %>%
-  mutate(class = fct_reorder(country, gdp, .fun='median')) %>%
-  ggplot( aes(x=reorder(country, gdp), y=gdp, fill=country)) + 
-    geom_boxplot() +
-    xlab("Country") + ylab("Gdp")+ggtitle('Median GPD by Country')+
-    theme(legend.position="none")
-df$Year<-as.character(format(df$Year,'%Y'))
-df %>%
-  mutate(class = fct_reorder(Year, gdp, .fun='median')) %>%
-  ggplot( aes(x=reorder(Year, gdp), y=gdp, fill=Year)) + 
-    geom_boxplot() +
-    xlab("Year") + ylab("Gdp")+ggtitle('Median GPD by Year')+
-    theme(legend.position="none")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-#Google "when did the transfer of industries to china started", it explains the outliers for china and india are not really outliers
-columns = c("Year","Italy","France","United States","China","Brazil","India") 
-df = data.frame(matrix(nrow = 60, ncol = length(columns))) 
-colnames(df) = columns
-df$Year<-it$Year
-df$Italy<-it$gdp
-df$France<-fr$gdp
-df$`United States` <-us$gdp
-df$China<-cn$gdp
-df$Brazil<-br$gdp
-df$India<-id$gdp
-d=dim(df)[2]
-df <- xts(df[,2:d],df$Year)
-ggplot(mapping = aes(x = Index, y = Value)) +
-    geom_line(data = fortify(df$Italy, melt = TRUE), aes(color = "Italy"),size=1.2) + 
-    geom_line(data = fortify(df$France, melt = TRUE), aes(color = "France"),size=1.2) + 
-    geom_line(data = fortify(df$`United States`, melt = TRUE), aes(color = "United States"),size=1.2) +
-    geom_line(data = fortify(df$China, melt = TRUE), aes(color = "China"),size=1.2) +
-    geom_line(data = fortify(df$Brazil, melt = TRUE), aes(color = "Brazil"),size=1.2) +
-    geom_line(data = fortify(df$India, melt = TRUE), aes(color = "India"),size=1.2) +
-    xlab("Year") + ylab("GDP")+ggtitle('GDP growth')
+#divide each feature by population
+bypop<-function(country){
+  cols <- names(country)
+  cols<-cols[-1]#remove Year
+  cols<-cols[cols != "pop"] #remove pop from the names
+  country[cols] <- country[cols]/country$pop #divide each feature by pop
+  cols<-cols[cols != "Live"]
+  cols<-cols[cols != "gdp"]
+  country[cols] <- country[cols]*1000 #multiply each feature by 1000 to get kg for person
+  country$pop<-country$pop/1000000 #get population in millions
+  nums <- vapply(country, is.numeric, FUN.VALUE = logical(1))
+  country[,nums] <- round(country[,nums], digits = 2) #keep only 2 digits
+  return(country)
+}
+itpop<-bypop(it)
+frpop<-bypop(fr)
+uspop<-bypop(us)
+cnpop<-bypop(cn)
+idpop<-bypop(id)
+brpop<-bypop(br)
 ```
 
 ```{r}
-countries_boxplots<-function(countries){
+#since we are working with high value features, we could apply a log transformation
+it_log<-logscale(it)
+fr_log<-logscale(fr)
+us_log<-logscale(us)
+cn_log<-logscale(cn)
+id_log<-logscale(id)
+br_log<-logscale(br)
+```
+
+
+```{r}
+dfc<-function(countries,countries_names,title,title2,title3){
+  columns = c("Year","gdp","country") 
+  df1 = data.frame(matrix(nrow = 0, ncol = length(columns))) 
+  colnames(df1) = columns
+  i=1
+  for(x in countries){
+    dd<-x[,c("Year","gdp")]
+    dd$country<-countries_names[i]
+    i=i+1
+    df1<-rbind(df1,dd)
+  }
+  df2=data.frame(df1)
+  df2$Year<-as.character(format(df1$Year,'%Y'))
+  columns = c("Year",countries_names) 
+  df3 = data.frame(matrix(nrow = 60, ncol = length(columns))) 
+  colnames(df3) = columns
+  i=1
+  for(x in countries){
+      df3$Year<-x[,"Year"]
+      n=countries_names[i]
+      i=i+1
+      df3[,colnames(df3)==n]<-x[,"gdp"]
+  }
+  d=dim(df3)[2]
+  df3 <- xts(df3[,2:d],df3$Year)
+  list(df1 %>%
+  mutate(class = fct_reorder(country, gdp, .fun='median')) %>%
+  ggplot( aes(x=reorder(country, gdp), y=gdp, fill=country)) + 
+    geom_boxplot() +
+    xlab("Country") + ylab("Gdp")+ggtitle(title)+
+    theme(legend.position="none"),
+  df2 %>%
+  mutate(class = fct_reorder(Year, gdp, .fun='median')) %>%
+  ggplot( aes(x=reorder(Year, gdp), y=gdp, fill=Year)) + 
+    geom_boxplot() +
+    xlab("Year") + ylab("Gdp")+ggtitle(title2)+
+    theme(legend.position="none")+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5,
+                                                                    hjust=1)),
+  ggplot(mapping = aes(x = Index, y = Value)) +
+    geom_line(data = fortify(df3$Italy, melt = TRUE), aes(color = "Italy"),size=1.2) + 
+    geom_line(data = fortify(df3$France, melt = TRUE), aes(color = "France"),size=1.2) + 
+    geom_line(data = fortify(df3$`United States`, melt = TRUE), aes(color = "United States"),size=1.2) +
+    geom_line(data = fortify(df3$China, melt = TRUE), aes(color = "China"),size=1.2) +
+    geom_line(data = fortify(df3$Brazil, melt = TRUE), aes(color = "India"),size=1.2) +
+    geom_line(data = fortify(df3$India, melt = TRUE), aes(color = "Brazil"),size=1.2) +
+    xlab("Year") + ylab("GDP")+ggtitle(title3))
+}
+
+dfc(list(it,fr,us,cn,id,br),c("Italy","France","United States","China","India","Brazil"),'Median Total GPD by Country','Median Total GPD by Year',"Total GDP growth")
+
+dfc(list(it_log,fr_log,us_log,cn_log,id_log,br_log),c("Italy","France","United States","China","India","Brazil"),'Median Total log(GPD) by Country','Median log(GPD) by Year',"Log(GDP) growth")
+
+dfc(list(itpop,frpop,uspop,cnpop,idpop,brpop),c("Italy","France","United States","China","India","Brazil"),'Median GPD Per Capita by Country','Median GPD Per Capita by Year',"GDP Per Capita growth")
+```
+
+
+```{r}
+#se passi in input 1 usa itpop,frpop, se passi 2 usa it_log
+countries_boxplots<-function(countries,y){
   columns = c("Country","Item","Value") 
   df = data.frame(matrix(nrow = 0, ncol = length(columns))) 
   colnames(df) = columns
   for(con in countries){
     country<-agg_item(con)
+    if(y==1){
+      country<-bypop(country)
+    }
+    else if(y==2){
+      country<-logscale(country)
+    }
     cols=colnames(country)[-1]
     for(i in cols){
       a<-rep(con,60)
@@ -295,9 +340,11 @@ countries_boxplots<-function(countries){
     geom_boxplot() +
     facet_wrap(~Item, scale="free")
 }
-countries_boxplots(c("Italy","France"))
-countries_boxplots(c("Brazil","India","China"))
-countries_boxplots(c("China","United States"))
+countries_boxplots(c("Italy","France"),0)
+countries_boxplots(c("Italy","France"),1)
+countries_boxplots(c("Italy","France"),2)
+countries_boxplots(c("Brazil","India","China"),1)
+countries_boxplots(c("China","United States"),1)
 ```
 
 
@@ -305,7 +352,7 @@ countries_boxplots(c("China","United States"))
 #per Francia mettere # nella funzione ggplots per other
 #per Brasile mettere # nella funzione ggplots per ms
 #per USA mettere # nella funzione ggplots per fibres
-ggplots(it)
+ggplots(itpop)
 ```
 
 
@@ -316,53 +363,42 @@ corcountry(it)
 
 ```{r}
 #check the data by histograms
-summary(it$gdp)
-par(mfrow=c(1,3))
-for(i in c(2:4)){
-  hist(it[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
+check_hist<-function(country){
+  par(mfrow=c(1,3))
+  for(i in c(2:4)){
+    hist(country[,i], col="orange", main=paste(colnames(country)[i]), xlab="")
+    }
+  par(mfrow=c(1,3))
+  for(i in c(5:7)){
+    hist(country[,i], col="orange", main=paste(colnames(country)[i]), xlab="")
+    }
+  par(mfrow=c(1,3))
+  for(i in c(8:10)){
+    hist(country[,i], col="orange", main=paste(colnames(country)[i]), xlab="")
+    }
+  par(mfrow=c(1,3))
+  for(i in c(11:13)){
+    hist(country[,i], col="orange", main=paste(colnames(country)[i]), xlab="")
+  }
 }
-par(mfrow=c(1,3))
-for(i in c(5:7)){
-  hist(it[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
-}
-par(mfrow=c(1,3))
-for(i in c(8:10)){
-  hist(it[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
-}
-par(mfrow=c(1,3))
-for(i in c(11:13)){
-  hist(it[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
-}
-#since we are working with high value features, we apply a log transformation
-it_log<-logscale(it)
-
-par(mfrow=c(1,3))
-for(i in c(2:4)){
-  hist(it_log[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
-}
-par(mfrow=c(1,3))
-for(i in c(5:7)){
-  hist(it_log[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
-}
-par(mfrow=c(1,3))
-for(i in c(8:10)){
-  hist(it_log[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
-}
-par(mfrow=c(1,3))
-for(i in c(11:13)){
-  hist(it_log[,i], col="orange", main=paste(colnames(it)[i]), xlab="")
-}
+check_hist(it_log)
+check_hist(itpop)
 ```
+
+
 
 ```{r}
 tslm_gdp(it)
 tslm_gdp(it_log)
+tslm(itpop)
 ```
 
 ```{r}
 it_restricted<-lm_vif(it)
+it_pop_restricted<-lm_vif(itpop)
 it_log_restricted<-lm_vif(it_log)
 ```
+
 
 ```{r}
 #ARIMA
@@ -386,107 +422,32 @@ get_arima(it_log_restricted)
 
 ```{r}
 armax_aics<-get_arimax(it_restricted)
-armax_aics_log<-get_arimax(it_log_restricted)
 armax_aics
 armax_aics[armax_aics$AIC==min(armax_aics$AIC),]$feature
+```
+
+```{r}
+armax_aics_log<-get_arimax(it_log_restricted)
 armax_aics_log
 armax_aics_log[armax_aics_log$AIC==min(armax_aics_log$AIC),]$feature
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ```{r}
-###a better plot of the yearly time series
-plot(it$gdp, type= "b",xlab="Year", ylab="Annual Gdp",  pch=16, lty=3, xaxt="n", cex=0.6)
-axis(1, at=c(1,15,30,45,60), labels=it$Year[c(1,15,30,45,60)])
-
-bm_gdp<-BM(it$gdp,display = T)
-summary(bm_gdp)
-pred_bm<- predict(bm_gdp, newx=c(1:50))#cumulative
-pred.inst<- make.instantaneous(pred_bm)#instantaneous
-
-###we estimate the model with 50% of the data
-bm_gdp50<-BM(it$gdp[0:(dim(it)[1]/2)],display = T)
-summary(bm_gdp50)
-pred_bm50<- predict(bm_gdp50, newx=c(1:50))
-pred.inst50<- make.instantaneous(pred_bm50)
-
-###we estimate the model with 25% of the data
-bm_gdp75<-BM(it$gdp[0:(dim(it)[1]/4)],display = T)
-summary(bm_gdp75)
-pred_bm75<- predict(bm_gdp75, newx=c(1:50))
-pred.inst75<- make.instantaneous(pred_bm75)
-
-###plot of fitted model 
-plot(it$gdp, type= "b",xlab="Year", ylab="Annual Gdp",  pch=16, lty=3, xaxt="n", cex=0.6)
-axis(1, at=c(1,15,30,45,60), labels=it$Year[c(1,15,30,45,60)])
-lines(pred.inst75, lwd=2, col=2)
-lines(pred.inst50, lwd=2, col=3)
-lines(pred.inst, lwd=2, col=4)
-
-###Comparison between models (cumulative)
-plot(cumsum(it$gdp), type= "b",xlab="Year", ylab="Annual Gdp",  pch=16, lty=3, xaxt="n", cex=0.6)
-axis(1, at=c(1,15,30,45,60), labels=it$Year[c(1,15,30,45,60)])
-lines(pred_bm75, lwd=2, col=2)
-lines(pred_bm50, lwd=2, col=3)
-lines(pred_bm, lwd=2, col=4)
-```
-
-
-
-
-
-
-
-SE SI VUOLE UTILIZZARE GBM E GLI SHOCK BISOGNA USARE I BASS MODEL SUL DATASET SENZA LOGARITMI
-```{r}
-#GBM with 1 rectangular shock
-GBMr1<- GBM(it$gdp,shock = "rett",nshock = 1,prelimestimates = c(bm_gdp$Estimate$Estimate[1], bm_gdp$Estimate$Estimate[2], bm_gdp$Estimate$Estimate[3], 40,50,-0.5))
-summary(GBMr1)
-```
-
-```{r}
-GBMe1<- GBM(it$gdp,shock = "exp",nshock = 1,prelimestimates = c(bm_gdp$Estimate$Estimate[1], bm_gdp$Estimate$Estimate[2], bm_gdp$Estimate$Estimate[3], 35,-0.1,0.1))
-summary(GBMe1)
-pred_GBMe1<- predict(GBMe1, newx=c(1:60))
-pred_GBMe1.inst<- make.instantaneous(pred_GBMe1)
-plot(it$gdp, type= "b",xlab="Year", ylab="GDP",  pch=16, lty=3, cex=0.6, xlim=c(1,60))
-lines(pred_GBMe1.inst, lwd=2, col=2)
-```
-
-```{r}
-GGM_gdp<- GGM(it$gdp, prelimestimates=c(bm_gdp$Estimate$Estimate[1], 0.001, 0.01, bm_gdp$Estimate$Estimate[2], bm_gdp$Estimate$Estimate[3]))
-summary(GGM_gdp)
-pred_GGM<- predict(GGM_gdp, newx=c(1:60))
-pred_GGM.inst<- make.instantaneous(pred_GGM)
-plot(it$gdp, type= "b",xlab="Year", ylab="GDP",  pch=16, lty=3, cex=0.6, xlim=c(1,60))
-lines(pred_GGM.inst, lwd=2, col=2)
-lines(predbm_inst, lwd=2, col=3)
-Acf(residuals(GGM_gdp))
-```
-
-```{r}
-ucrcdNR<-UCRCD(it$gdp,it$cereals)
-summary(ucrcdNR)
+#Plots the scatter plot in preparation to GAM
+plotcrops<-function(country){
+  xs<-colnames(country)[-c(1,2)]
+  y<-country$gdp
+  columns = c("Item","GDP","Value") 
+  df = data.frame(matrix(nrow = 0, ncol = length(columns))) 
+  colnames(df) = columns
+  for(x in xs){
+    dd<-data.frame(Item=x,GDP=y,Value=country[,colnames(country)==x])
+    df<-rbind(df,dd)
+    }
+  xyplot(GDP ~ Value | Item, data=df,pch=1,col=2)
+}
+plotcrops(it_restricted)
+plotcrops(it_log_restricted)
 ```
 
 
