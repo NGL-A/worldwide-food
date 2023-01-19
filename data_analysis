@@ -6,8 +6,8 @@ output: html_document
 ---
 Study the data of the country
 Correlation matrix to see correlation among predictors
-Use tslm as baseline, check dw
 Use linear model to get VIF and extract a subset of features
+Use GAM as baseline
 Use Arima
 Use Arimax looking for the feature that gets the lowest AIC
 
@@ -30,6 +30,7 @@ library(car)
 library(forcats)
 library(tseries)
 library(lattice)
+library(gam)
 farming <- read.csv(file = './farming.csv')
 ```
 
@@ -116,16 +117,16 @@ ggplots<-function(country_subset){
   list(ggplot(mapping = aes(x = Index, y = Value)) +
     geom_line(data = fortify(df$cereals, melt = TRUE), aes(color = "cereals"),size=1.2) + 
     geom_line(data = fortify(df$fibres, melt = TRUE), aes(color = "fibres"),size=1.2) + 
-    #geom_line(data = fortify(df$fr_veg, melt = TRUE), aes(color = "fr_veg"),size=1.2) +
+    geom_line(data = fortify(df$fr_veg, melt = TRUE), aes(color = "fr_veg"),size=1.2) +
     geom_line(data = fortify(df$herbs, melt = TRUE), aes(color = "herbs"),size=1.2) +
     geom_line(data = fortify(df$legumes, melt = TRUE), aes(color = "legumes"),size=1.2) +
-    #geom_line(data = fortify(df$Live, melt = TRUE), aes(color = "Live"),size=1.2) +
+    geom_line(data = fortify(df$Live, melt = TRUE), aes(color = "Live"),size=1.2) +
     geom_line(data = fortify(df$ms, melt = TRUE), aes(color = "ms"),size=1.2) +
     geom_line(data = fortify(df$nuts, melt = TRUE), aes(color = "nuts"),size=1.2) +
     geom_line(data = fortify(df$oils, melt = TRUE), aes(color = "oils"),size=1.2) +
     geom_line(data = fortify(df$other, melt = TRUE), aes(color = "other"),size=1.2) +
     geom_line(data = fortify(df$tubers, melt = TRUE), aes(color = "tubers"),size=1.2) +
-    xlab("Year") + ylab("Tons")+ggtitle('Production growth'),
+    xlab("Year") + ylab("Kg")+ggtitle('Production growth'),
   ggplot(mapping = aes(x = Index, y = Value)) +
     geom_line(data = fortify(df$gdp, melt = TRUE), aes(color = "GDP"),size=1.2) + 
     xlab("Year") + ylab("Gdp")+ggtitle('GDP growth'),
@@ -158,7 +159,7 @@ logscale<-function(country){
 }
 #perform a selection of the features based on the vif
 lm_vif<-function(country){
-  m1 <- lm(gdp~.-Year, data=country)
+  m1 <- lm(gdp~.-Year-pop, data=country)
   vif_values <- vif(m1)
   #create horizontal bar chart to display each VIF value
   barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue",las=1)
@@ -204,6 +205,20 @@ get_arimax<-function(country){
   }
   return(df_arimax)
 }
+#divide each feature by population
+bypop<-function(country){
+  cols <- names(country)
+  cols<-cols[-1]#remove Year
+  cols<-cols[cols != "pop"] #remove pop from the names
+  country[cols] <- country[cols]/country$pop #divide each feature by pop
+  cols<-cols[cols != "Live"]
+  cols<-cols[cols != "gdp"]
+  country[cols] <- country[cols]*1000 #multiply each feature by 1000 to get kg for person
+  country$pop<-country$pop/1000000 #get population in millions
+  nums <- vapply(country, is.numeric, FUN.VALUE = logical(1))
+  country[,nums] <- round(country[,nums], digits = 2) #keep only 2 digits
+  return(country)
+}
 ```
 
 
@@ -220,32 +235,20 @@ comment(us) <-"United States"
 comment(cn) <-"China"
 comment(br) <-"Brazil"
 comment(id) <-"India"
-```
 
-```{r}
-#divide each feature by population
-bypop<-function(country){
-  cols <- names(country)
-  cols<-cols[-1]#remove Year
-  cols<-cols[cols != "pop"] #remove pop from the names
-  country[cols] <- country[cols]/country$pop #divide each feature by pop
-  cols<-cols[cols != "Live"]
-  cols<-cols[cols != "gdp"]
-  country[cols] <- country[cols]*1000 #multiply each feature by 1000 to get kg for person
-  country$pop<-country$pop/1000000 #get population in millions
-  nums <- vapply(country, is.numeric, FUN.VALUE = logical(1))
-  country[,nums] <- round(country[,nums], digits = 2) #keep only 2 digits
-  return(country)
-}
 itpop<-bypop(it)
 frpop<-bypop(fr)
 uspop<-bypop(us)
 cnpop<-bypop(cn)
 idpop<-bypop(id)
 brpop<-bypop(br)
-```
+comment(itpop) <-"Italy"
+comment(frpop) <-"France"
+comment(uspop) <-"United States"
+comment(cnpop) <-"China"
+comment(brpop) <-"Brazil"
+comment(idpop) <-"India"
 
-```{r}
 #since we are working with high value features, we could apply a log transformation
 it_log<-logscale(it)
 fr_log<-logscale(fr)
@@ -253,6 +256,12 @@ us_log<-logscale(us)
 cn_log<-logscale(cn)
 id_log<-logscale(id)
 br_log<-logscale(br)
+comment(it_log) <-"Italy"
+comment(fr_log) <-"France"
+comment(us_log) <-"United States"
+comment(cn_log) <-"China"
+comment(br_log) <-"Brazil"
+comment(id_log) <-"India"
 ```
 
 
@@ -314,7 +323,7 @@ dfc(list(itpop,frpop,uspop,cnpop,idpop,brpop),c("Italy","France","United States"
 
 
 ```{r}
-#se passi in input 1 usa itpop,frpop, se passi 2 usa it_log
+#se passi in input 1 usa itpop,frpop, se passi 2 usa it_log, se passi 0 usa it
 countries_boxplots<-function(countries,y){
   columns = c("Country","Item","Value") 
   df = data.frame(matrix(nrow = 0, ncol = length(columns))) 
@@ -340,9 +349,7 @@ countries_boxplots<-function(countries,y){
     geom_boxplot() +
     facet_wrap(~Item, scale="free")
 }
-countries_boxplots(c("Italy","France"),0)
 countries_boxplots(c("Italy","France"),1)
-countries_boxplots(c("Italy","France"),2)
 countries_boxplots(c("Brazil","India","China"),1)
 countries_boxplots(c("China","United States"),1)
 ```
@@ -357,7 +364,7 @@ ggplots(itpop)
 
 
 ```{r}
-corcountry(it)
+corcountry(itpop)
 ```
 
 
@@ -381,71 +388,54 @@ check_hist<-function(country){
     hist(country[,i], col="orange", main=paste(colnames(country)[i]), xlab="")
   }
 }
-check_hist(it_log)
 check_hist(itpop)
 ```
 
 
-
 ```{r}
-tslm_gdp(it)
-tslm_gdp(it_log)
-tslm(itpop)
-```
-
-```{r}
-it_restricted<-lm_vif(it)
+#uso vif value=5 come soglia dato che sicuramente le variabili sono correlate tra loro
+#ho escluso la popolazione
 it_pop_restricted<-lm_vif(itpop)
-it_log_restricted<-lm_vif(it_log)
 ```
 
+```{r}
+##Stepwise GAM
+
+#non capisco bene se usare Year come date o come numerico, si ottiene una differenza di AIC 
+#di 15 e la tabella Anova cambia un poco
+
+#it_pop_restricted$Year<-as.numeric(it_pop_restricted$Year)
+it_pop_restricted$Year<-as.Date(it_pop_restricted$Year)
+#Start with a linear model (df=1)
+g3 <- gam(gdp~. , data=it_pop_restricted)
+#Perform stepwise selection using gam scope
+sc = gam.scope(it_pop_restricted[,-2], response=2, arg=c("df=2","df=3","df=4"))
+g4<- step.Gam(g3, scope=sc, trace=F)#step-wise regression using as starting point the previous model. Consider this particular scope sc with the defined degrees of freedom
+summary(g4)
+AIC(g4)
+par(mfrow=c(3,3))
+plot(g4, se=T)
+```
 
 ```{r}
 #ARIMA
 #test to see if the time series is stationary for the gdp
 #We reject the null hypothesis of stationary if the p-value is smaller than 0.05.
 #(the p-value is always >0.05 for all the countries, the series are not stationary)
-adf.test(it_restricted$gdp)
-adf.test(it_log_restricted$gdp)
+adf.test(it_pop_restricted$gdp)
 #check if the time series has white noise
 #check how long is the tail, how many lags it takes for the bars to get below the line of the white noise
 #other check for seasonality, the ACF plot usually reveals definitive repeated spikes at the multiples of the seasonal window.
-tsdisplay(it_restricted$gdp)
-tsdisplay(it_log_restricted$gdp)
+tsdisplay(it_pop_restricted$gdp)
 ```
 
 ```{r}
-get_arima(it_restricted)
-get_arima(it_log_restricted)
+get_arima(it_pop_restricted)
 #arima with lowest AIC is the best
 ```
 
 ```{r}
-armax_aics<-get_arimax(it_restricted)
+armax_aics<-get_arimax(it_pop_restricted)
 armax_aics
 armax_aics[armax_aics$AIC==min(armax_aics$AIC),]$feature
-```
-
-```{r}
-armax_aics_log<-get_arimax(it_log_restricted)
-armax_aics_log
-armax_aics_log[armax_aics_log$AIC==min(armax_aics_log$AIC),]$feature
-```
-
-```{r}
-#Plots the scatter plot in preparation to GAM
-plotcrops<-function(country){
-  xs<-colnames(country)[-c(1,2)]
-  y<-country$gdp
-  columns = c("Item","GDP","Value") 
-  df = data.frame(matrix(nrow = 0, ncol = length(columns))) 
-  colnames(df) = columns
-  for(x in xs){
-    dd<-data.frame(Item=x,GDP=y,Value=country[,colnames(country)==x])
-    df<-rbind(df,dd)
-    }
-  xyplot(GDP ~ Value | Item, data=df,pch=1,col=2)
-}
-plotcrops(it_restricted)
-plotcrops(it_log_restricted)
 ```
