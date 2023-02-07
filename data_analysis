@@ -11,10 +11,6 @@ Use GAM as baseline
 Use Arima
 Use Arimax looking for the feature that gets the lowest AIC
 
-ACf has significant correlation -> trend
-F -> significance of the model, if>4 good
-
-gdp/pop->gdp per capita
 
 ```{r}
 library(readxl)
@@ -116,7 +112,7 @@ ggplots<-function(country_subset){
   df <- xts(country_subset[,2:d],country_subset$Year)
   list(ggplot(mapping = aes(x = Index, y = Value)) +
     geom_line(data = fortify(df$cereals, melt = TRUE), aes(color = "cereals"),size=1.2) + 
-    geom_line(data = fortify(df$fibres, melt = TRUE), aes(color = "fibres"),size=1.2) + 
+    #geom_line(data = fortify(df$fibres, melt = TRUE), aes(color = "fibres"),size=1.2) + 
     geom_line(data = fortify(df$fr_veg, melt = TRUE), aes(color = "fr_veg"),size=1.2) +
     geom_line(data = fortify(df$herbs, melt = TRUE), aes(color = "herbs"),size=1.2) +
     geom_line(data = fortify(df$legumes, melt = TRUE), aes(color = "legumes"),size=1.2) +
@@ -158,11 +154,11 @@ logscale<-function(country){
   return(country)
 }
 #perform a selection of the features based on the vif
-lm_vif<-function(country){
+lm_vif<-function(country,titlemain){
   m1 <- lm(gdp~.-Year-pop, data=country)
   vif_values <- vif(m1)
   #create horizontal bar chart to display each VIF value
-  barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue",las=1)
+  barplot(vif_values, main = paste("VIF Values:",titlemain), horiz = TRUE, col = "steelblue",las=1)
   abline(v = 5, lwd = 3, lty = 2)
   #keep only the variables with VIF<5
   country<-country[,c("Year","gdp",names(vif_values[vif_values<5]))]
@@ -314,9 +310,9 @@ dfc<-function(countries,countries_names,title,title2,title3){
     xlab("Year") + ylab("GDP")+ggtitle(title3))
 }
 
-dfc(list(it,fr,us,cn,id,br),c("Italy","France","United States","China","India","Brazil"),'Median Total GPD by Country','Median Total GPD by Year',"Total GDP growth")
+dfc(list(it,fr,us,cn,id,br),c("Italy","France","United States","China","India","Brazil"),'Median GPD by Country','Median GPD by Year',"GDP growth")
 
-dfc(list(it_log,fr_log,us_log,cn_log,id_log,br_log),c("Italy","France","United States","China","India","Brazil"),'Median Total log(GPD) by Country','Median log(GPD) by Year',"Log(GDP) growth")
+dfc(list(it_log,fr_log,us_log,cn_log,id_log,br_log),c("Italy","France","United States","China","India","Brazil"),'Median log(GPD) by Country','Median log(GPD) by Year',"Log(GDP) growth")
 
 dfc(list(itpop,frpop,uspop,cnpop,idpop,brpop),c("Italy","France","United States","China","India","Brazil"),'Median GPD Per Capita by Country','Median GPD Per Capita by Year',"GDP Per Capita growth")
 ```
@@ -395,7 +391,7 @@ check_hist(itpop)
 ```{r}
 #uso vif value=5 come soglia dato che sicuramente le variabili sono correlate tra loro
 #ho escluso la popolazione
-it_pop_restricted<-lm_vif(itpop)
+it_pop_restricted<-lm_vif(itpop,"Italy")
 ```
 
 ```{r}
@@ -404,15 +400,20 @@ it_pop_restricted<-lm_vif(itpop)
 #non capisco bene se usare Year come date o come numerico, si ottiene una differenza di AIC 
 #di 15 e la tabella Anova cambia un poco
 
-#it_pop_restricted$Year<-as.numeric(it_pop_restricted$Year)
-it_pop_restricted$Year<-as.Date(it_pop_restricted$Year)
+it_pop_restricted$Year<-as.numeric(it_pop_restricted$Year)
+#it_pop_restricted$Year<-as.Date(it_pop_restricted$Year)
 #Start with a linear model (df=1)
 g3 <- gam(gdp~. , data=it_pop_restricted)
 #Perform stepwise selection using gam scope
 sc = gam.scope(it_pop_restricted[,-2], response=2, arg=c("df=2","df=3","df=4"))
-g4<- step.Gam(g3, scope=sc, trace=F)#step-wise regression using as starting point the previous model. Consider this particular scope sc with the defined degrees of freedom
+g4<- step.Gam(g3, scope=sc, trace=F,direction="both")#step-wise regression using as starting point the previous model. Consider this particular scope sc with the defined degrees of freedom
+#per France usare direction=forward
+#per Brazil usare direction=backward
+#per China usare direction=forward
 summary(g4)
 AIC(g4)
+checkresiduals(g4)
+dwtest(g4)
 par(mfrow=c(3,3))
 plot(g4, se=T)
 ```
@@ -439,3 +440,10 @@ armax_aics<-get_arimax(it_pop_restricted)
 armax_aics
 armax_aics[armax_aics$AIC==min(armax_aics$AIC),]$feature
 ```
+
+
+
+
+
+
+
